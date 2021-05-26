@@ -1,3 +1,5 @@
+import resolver.runDns
+
 fun main(args: Array<String>) {
-    println("Hello World!")
+    runDns("192.168.1.40")
 }

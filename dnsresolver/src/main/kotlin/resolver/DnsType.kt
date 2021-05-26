@@ -16,7 +16,8 @@ enum class DnsType(val value: Int) {
     HINFO(13),
     MINFO(14),
     MX(15),
-    TXT(16);
+    TXT(16),
+    AAAA(28);
 
     companion object {
         fun fromValue(value: Int): DnsType {

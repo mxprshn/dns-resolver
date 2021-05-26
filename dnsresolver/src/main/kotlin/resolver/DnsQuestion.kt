@@ -1,3 +1,3 @@
 package resolver
 
-data class DnsQuestion(val names: List<String>, val type: DnsType, val dnsClass: DnsClass)
+data class DnsQuestion(val labels: List<String>, val type: DnsType, val dnsClass: DnsClass)
