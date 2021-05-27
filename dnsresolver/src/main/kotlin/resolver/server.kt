@@ -11,12 +11,6 @@ import java.net.InetSocketAddress
 private const val DNS_PORT = 53
 
 fun runDns(ip: String) {
-    val dnsService = DnsServiceImpl(
-        DnsPacketProcessorImpl(),
-        ExternalDnsService("8.8.8.8"),
-        setOf("timetable.spbu.ru"),
-        "192.168.1.40"
-    )
 
     runBlocking {
         val server = aSocket(ActorSelectorManager(Dispatchers.IO))
@@ -28,8 +22,6 @@ fun runDns(ip: String) {
 
             launch {
                 val packet = receivedDatagram.packet.readBytes()
-                val answerPacket = dnsService.resolveAddress(packet)
-                server.send(Datagram(ByteReadPacket(answerPacket), receivedDatagram.address))
             }
         }
     }

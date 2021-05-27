@@ -1,0 +1,15 @@
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.fail
+import resolver.DnsPacket
+
+
+class DnsPacketTests {
+
+    @Test
+    fun `parsed and encoded packets are the same`() {
+        val packet = "704d7b66432650ff2057bb2a0800450000a9658040004011514ac0a80101c0a801280035f3a700957e06c58b818000010005000000000961647365727669636506676f6f676c650272750000010001c00c0005000100000019001c087061676561643436016c0b646f75626c65636c69636b036e657400c03100010001000000ce000440e9a19bc03100010001000000ce000440e9a19cc03100010001000000ce000440e9a19dc03100010001000000ce000440e9a19a"
+        val bytes = packet.toByteArray()
+        DnsPacket.fromByteArray(bytes)
+        fail { " " }
+    }
+}
