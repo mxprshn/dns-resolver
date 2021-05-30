@@ -166,11 +166,11 @@ data class DnsPacket(
                 val authoritiesCount = ByteUtils.twoBytesToInt(array[8], array[9])
                 val additionalsCount = ByteUtils.twoBytesToInt(array[10], array[11])
 
-                var pointer = 12
+                var currentByteIndex = 12
 
                 fun parseName(): List<String> {
                     val labels = mutableListOf<String>()
-                    var labelLength = array[pointer].toInt()
+                    var labelLength = array[currentByteIndex].toInt()
                     var isPointer = false
 
                     while (labelLength != 0 && !isPointer) {
@@ -178,20 +178,20 @@ data class DnsPacket(
                         isPointer = labelLengthBits[0] && labelLengthBits[1]
 
                         if (isPointer) {
-                            val offset = ByteUtils.twoBytesToInt(array[pointer], array[pointer+1]).and(0x3fff)
-                            val oldPointer = pointer
-                            pointer = offset
+                            val offset = ByteUtils.twoBytesToInt(array[currentByteIndex], array[currentByteIndex+1]).and(0x3fff)
+                            val oldPointer = currentByteIndex
+                            currentByteIndex = offset
                             val pointedName = parseName()
-                            pointer = oldPointer
+                            currentByteIndex = oldPointer
                             labels.addAll(pointedName)
-                            pointer += 1
+                            currentByteIndex += 1
                         } else {
-                            val labelStartIndex = pointer + 1
-                            val labelEndIndex = pointer + labelLength
+                            val labelStartIndex = currentByteIndex + 1
+                            val labelEndIndex = currentByteIndex + labelLength
                             val labelBytes = array.copyOfRange(labelStartIndex, labelEndIndex + 1)
                             labels.add(labelBytes.decodeToString())
-                            pointer += (labelLength + 1)
-                            labelLength = array[pointer].toInt()
+                            currentByteIndex += (labelLength + 1)
+                            labelLength = array[currentByteIndex].toInt()
                         }
                     }
                     return labels
@@ -199,8 +199,8 @@ data class DnsPacket(
 
                 for (i in 0 until questionsCount) {
                     val labels = parseName()
-                    val typeValue = ByteUtils.twoBytesToInt(array[pointer + 1], array[pointer + 2])
-                    val classValue = ByteUtils.twoBytesToInt(array[pointer + 3], array[pointer + 4])
+                    val typeValue = ByteUtils.twoBytesToInt(array[currentByteIndex + 1], array[currentByteIndex + 2])
+                    val classValue = ByteUtils.twoBytesToInt(array[currentByteIndex + 3], array[currentByteIndex + 4])
 
                     val type = DnsType.fromValue(typeValue)
                     if (type !in Config.supportedDnsTypes) {
@@ -211,37 +211,37 @@ data class DnsPacket(
                         labels.forEach { - it }
                     }
 
-                    pointer += 5
+                    currentByteIndex += 5
                 }
 
                 fun ResourceRecordDsl.parseResourceRecord() {
                     name { parseName().forEach { - it } }
 
-                    val typeValue = ByteUtils.twoBytesToInt(array[pointer + 1], array[pointer + 2])
-                    val classValue = ByteUtils.twoBytesToInt(array[pointer + 3], array[pointer + 4])
+                    val typeValue = ByteUtils.twoBytesToInt(array[currentByteIndex + 1], array[currentByteIndex + 2])
+                    val classValue = ByteUtils.twoBytesToInt(array[currentByteIndex + 3], array[currentByteIndex + 4])
 
                     val type = DnsType.fromValue(typeValue)
 
                     dnsClass = DnsClass.fromValue(classValue)
                     timeToLive = ByteUtils.fourBytesToInt(
-                        array[pointer + 5],
-                        array[pointer + 6],
-                        array[pointer + 7],
-                        array[pointer + 8]
+                        array[currentByteIndex + 5],
+                        array[currentByteIndex + 6],
+                        array[currentByteIndex + 7],
+                        array[currentByteIndex + 8]
                     )
 
-                    val dataLength = ByteUtils.twoBytesToInt(array[pointer + 9], array[pointer + 10])
-                    val data = array.sliceArray(pointer + 11 until pointer + 11 + dataLength)
-                    pointer += 11
+                    val dataLength = ByteUtils.twoBytesToInt(array[currentByteIndex + 9], array[currentByteIndex + 10])
+                    val data = array.sliceArray(currentByteIndex + 11 until currentByteIndex + 11 + dataLength)
+                    currentByteIndex += 11
 
                     when (type) {
                         DnsType.NS -> {
                             typeNS { parseName().forEach { - it } }
-                            pointer += 1
+                            currentByteIndex += 1
                         }
                         DnsType.A -> {
                             typeA(data.joinToString(".") { it.toInt().toString() })
-                            pointer += dataLength
+                            currentByteIndex += dataLength
                         }
                         DnsType.AAAA -> {
                             typeAAAA(
@@ -249,7 +249,7 @@ data class DnsPacket(
                                     ByteUtils.twoBytesToInt(it[0], it[1]).toString()
                                 }
                             )
-                            pointer += dataLength
+                            currentByteIndex += dataLength
                         }
                         else -> throw UnsupportedDnsTypeException(type)
                     }
