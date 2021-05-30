@@ -9,7 +9,7 @@ fun packet(builder: PacketDsl.() -> Unit): DnsPacket {
 interface PacketDsl {
 
     var id: Int
-    var isQuery: Boolean
+    var isResponse: Boolean
     var opcode: Int
     var authoritativeAnswer: Boolean
     var truncation: Boolean
@@ -47,7 +47,7 @@ interface ResourceRecordDsl {
 class PacketDslImpl : PacketDsl {
 
     override var id: Int = 0
-    override var isQuery: Boolean = false
+    override var isResponse: Boolean = false
     override var opcode: Int = 0
     override var authoritativeAnswer: Boolean = false
     override var recursionAvailable: Boolean = false
@@ -62,7 +62,7 @@ class PacketDslImpl : PacketDsl {
 
     val packet get() = DnsPacket(
         id = id,
-        isQuery = isQuery,
+        isResponse = isResponse,
         opcode = opcode,
         authoritativeAnswer = authoritativeAnswer,
         recursionAvailable = recursionAvailable,

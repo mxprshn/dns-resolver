@@ -5,7 +5,7 @@ class DnsServiceImpl : DnsService {
 
         packet {
             id = 44
-            isQuery = false
+            isResponse = false
             truncation = false
 
             question(DnsType.A, DnsClass.IN) {
