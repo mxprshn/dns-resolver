@@ -1,5 +1,7 @@
 package resolver
 
+import utils.log
+
 fun packet(builder: PacketDsl.() -> Unit): DnsPacket {
     val packetDsl = PacketDslImpl()
     builder(packetDsl)
@@ -91,18 +93,21 @@ class PacketDslImpl : PacketDsl {
         val recordDsl = ResourceRecordDslImpl()
         builder(recordDsl)
         answers.add(recordDsl.resourceRecord)
+        log("Parsed answers:${answers.size} auth:${authorities.size} add: ${additionals.size}")
     }
 
     override fun authority(builder: ResourceRecordDsl.() -> Unit) {
         val recordDsl = ResourceRecordDslImpl()
         builder(recordDsl)
         authorities.add(recordDsl.resourceRecord)
+        log("Parsed answers:${answers.size} auth:${authorities.size} add: ${additionals.size}")
     }
 
     override fun additional(builder: ResourceRecordDsl.() -> Unit) {
         val recordDsl = ResourceRecordDslImpl()
         builder(recordDsl)
         additionals.add(recordDsl.resourceRecord)
+        log("Parsed answers:${answers.size} auth:${authorities.size} add: ${additionals.size}")
     }
 }
 

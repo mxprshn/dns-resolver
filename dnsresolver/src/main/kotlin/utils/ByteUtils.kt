@@ -1,16 +1,22 @@
 package utils
 
 object ByteUtils {
+    @ExperimentalUnsignedTypes
     fun twoBytesToInt(high: Byte, low: Byte): Int {
-        return (high.toInt() shl 8) + low
+        val string = "${"%02x".format(high)}${"%02x".format(low)}"
+        log(string)
+        return string.toInt(16)
     }
 
+    @ExperimentalUnsignedTypes
     fun fourBytesToInt(vararg bytes: Byte): Int {
         require(bytes.size == 4)
-        return (bytes[0].toInt() shl 32) +
-            (bytes[1].toInt() shl 16) +
-            (bytes[2].toInt() shl 8) +
-            bytes[3]
+        val result = ((bytes[0].toUInt() shl 32) +
+            (bytes[1].toUInt() shl 16) +
+            (bytes[2].toUInt() shl 8) +
+             bytes[3].toUInt())
+        log("uint: $result")
+        return result.toInt()
     }
 
     fun listOfLabelsToDnsNameBytes(labels: List<String>): ByteArray {

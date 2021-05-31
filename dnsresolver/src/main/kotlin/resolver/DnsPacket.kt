@@ -72,7 +72,7 @@ data class DnsPacket(
 
         init {
             val ipBytes = ipV6.split(":").flatMap { it.chunked(2) }
-            require(ipBytes.size == 16 && ipBytes.all { it.toLong(radix = 16) < 256 })
+            //require(ipBytes.size == 16 && ipBytes.all { it.toLong(radix = 16) < 256 })
             data = byteArrayOf(*ipBytes.map { it.toLong(radix = 16).toByte() }.toByteArray())
         }
     }
@@ -147,6 +147,7 @@ data class DnsPacket(
     }
 
     companion object {
+        @ExperimentalUnsignedTypes
         fun fromByteArray(array: ByteArray): DnsPacket {
             return packet {
                 id = ByteUtils.twoBytesToInt(array[0], array[1])
@@ -178,13 +179,19 @@ data class DnsPacket(
                         isPointer = labelLengthBits[0] && labelLengthBits[1]
 
                         if (isPointer) {
-                            val offset = ByteUtils.twoBytesToInt(array[currentByteIndex], array[currentByteIndex+1]).and(0x3fff)
+                            val firstOffsetByte = array[currentByteIndex].toUInt().and(63u).toByte()
+                            val offset = ByteUtils.twoBytesToInt(firstOffsetByte, array[currentByteIndex+1])
+                            if(offset == -127) {
+                                val kek = 0
+                            }
                             val oldPointer = currentByteIndex
                             currentByteIndex = offset
+                            log(offset.toString())
                             val pointedName = parseName()
                             currentByteIndex = oldPointer
                             labels.addAll(pointedName)
                             currentByteIndex += 1
+                            log("Parsed pointer label, currentIndex=$currentByteIndex length=$labelLength $labels")
                         } else {
                             val labelStartIndex = currentByteIndex + 1
                             val labelEndIndex = currentByteIndex + labelLength
@@ -192,6 +199,7 @@ data class DnsPacket(
                             labels.add(labelBytes.decodeToString())
                             currentByteIndex += (labelLength + 1)
                             labelLength = array[currentByteIndex].toInt()
+                            log("Parsed label, currentIndex=$currentByteIndex length=$labelLength $labels")
                         }
                     }
                     return labels
@@ -253,6 +261,7 @@ data class DnsPacket(
                         }
                         else -> throw UnsupportedDnsTypeException(type)
                     }
+                    log("Remaining: ${array.slice(currentByteIndex until array.size).joinToString("") { "%02x".format(it) }}")
                 }
 
                 for (i in 0 until answersCount) { answer { parseResourceRecord() } }
