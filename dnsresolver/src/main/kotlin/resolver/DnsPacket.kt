@@ -186,12 +186,10 @@ data class DnsPacket(
                             }
                             val oldPointer = currentByteIndex
                             currentByteIndex = offset
-                            log(offset.toString())
                             val pointedName = parseName()
                             currentByteIndex = oldPointer
                             labels.addAll(pointedName)
                             currentByteIndex += 1
-                            log("Parsed pointer label, currentIndex=$currentByteIndex length=$labelLength $labels")
                         } else {
                             val labelStartIndex = currentByteIndex + 1
                             val labelEndIndex = currentByteIndex + labelLength
@@ -199,7 +197,6 @@ data class DnsPacket(
                             labels.add(labelBytes.decodeToString())
                             currentByteIndex += (labelLength + 1)
                             labelLength = array[currentByteIndex].toInt()
-                            log("Parsed label, currentIndex=$currentByteIndex length=$labelLength $labels")
                         }
                     }
                     return labels
@@ -261,7 +258,6 @@ data class DnsPacket(
                         }
                         else -> throw UnsupportedDnsTypeException(type)
                     }
-                    log("Remaining: ${array.slice(currentByteIndex until array.size).joinToString("") { "%02x".format(it) }}")
                 }
 
                 for (i in 0 until answersCount) { answer { parseResourceRecord() } }

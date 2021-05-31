@@ -20,7 +20,7 @@ fun Int.toBooleanArray(takeLastBits: Int): BooleanArray {
 fun Byte.toBooleanArray(): BooleanArray = this.toInt().toBooleanArray(8)
 
 fun BooleanArray.toByte(): Byte {
-    return this.joinToString("") { if (it) "1" else "0" }.toByte(radix = 2)
+    return this.joinToString("") { if (it) "1" else "0" }.toInt(radix = 2).toByte()
 }
 
 fun BooleanArray.toInt(): Int {

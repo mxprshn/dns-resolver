@@ -26,20 +26,21 @@ class DnsServiceImpl : DnsService {
         while (queue.isNotEmpty()) {
             val nsHost = queue.dequeue()
             if (!cache.containsKey(nsHost)) {
+                log("No cached ip found for $nsHost, resolve it")
                 cache[nsHost] = resolve(nsHost).ips.toMutableList()
             }
             val nsIp = cache[nsHost]?.first() ?: continue
+            log("Asking $nsHost on $nsIp for $domainName")
 
-            val questionPacket = packet {
-                id = 73
-                isResponse = false
-                opcode = 0
-                authoritativeAnswer = false
-                truncation = false
-                recursionDesired = false
-                recursionAvailable = false
-                responseCode = 0
-
+            val questionPacket = packet(id = 73,
+                    isResponse = false,
+                    opcode = 0,
+                    authoritativeAnswer = false,
+                    truncation = false,
+                    recursionDesired = false,
+                    recursionAvailable = false,
+                    responseCode = 0
+            ) {
                 question(DnsType.A, DnsClass.IN) {
                     domainName.split(".").forEach { - it }
                 }
@@ -50,7 +51,6 @@ class DnsServiceImpl : DnsService {
                 .connect(InetSocketAddress(nsIp, 53))
             socket.send(Datagram(ByteReadPacket(questionPacket), NetworkAddress(nsIp, 53)))
             val receivedPacketBytes = socket.receive().packet.readBytes()
-            log("Received: ${receivedPacketBytes.joinToString("") { "%02x".format(it) }}")
 
             val receivedPacket = DnsPacket.fromByteArray(receivedPacketBytes)
             val resolvedIpV4s = receivedPacket.answers.filterIsInstance<DnsPacket.ResourceRecordA>().map { it.ipV4 }
@@ -77,5 +77,49 @@ class DnsServiceImpl : DnsService {
         }
 
         return DnsService.Result(emptyList())
+    }
+
+    @ExperimentalUnsignedTypes
+    override suspend fun resolve(dnsQuery: ByteArray): ByteArray {
+        val queryPacket = DnsPacket.fromByteArray(dnsQuery)
+        if (queryPacket.questions.any { it.type !in Config.supportedDnsTypes }) {
+            return packet(
+                id = queryPacket.id,
+                isResponse = true,
+                opcode = 0,
+                authoritativeAnswer = false,
+                truncation = false,
+                recursionDesired = false,
+                recursionAvailable = false,
+                responseCode = 4
+            ) {}.bytes
+        }
+
+        val asked = queryPacket.questions.first().labels.joinToString(".")
+        val resolvedIps = resolve(asked).ips
+
+        return packet(
+            id = queryPacket.id,
+            isResponse = true,
+            opcode = 0,
+            authoritativeAnswer = false,
+            truncation = false,
+            recursionDesired = false,
+            recursionAvailable = false,
+            responseCode = 0
+        ) {
+            queryPacket.questions.forEach {
+                question(it.type, it.dnsClass) {
+                    it.labels.forEach { - it }
+                }
+            }
+
+            resolvedIps.forEach { ip ->
+                answer {
+                    name { asked.split(".").forEach { - it } }
+                    typeA(ip)
+                }
+            }
+        }.bytes
     }
 }

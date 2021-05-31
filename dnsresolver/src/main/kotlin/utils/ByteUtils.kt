@@ -4,7 +4,6 @@ object ByteUtils {
     @ExperimentalUnsignedTypes
     fun twoBytesToInt(high: Byte, low: Byte): Int {
         val string = "${"%02x".format(high)}${"%02x".format(low)}"
-        log(string)
         return string.toInt(16)
     }
 
@@ -15,7 +14,6 @@ object ByteUtils {
             (bytes[1].toUInt() shl 16) +
             (bytes[2].toUInt() shl 8) +
              bytes[3].toUInt())
-        log("uint: $result")
         return result.toInt()
     }
 
