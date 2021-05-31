@@ -10,6 +10,6 @@ fun runDns(ip: String) {
 
     runBlocking {
         val service = DnsServiceImpl()
-        service.resolve("", DnsType.A)
+        service.resolve("hwproj.me")
     }
 }

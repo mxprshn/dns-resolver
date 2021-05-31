@@ -248,7 +248,7 @@ data class DnsPacket(
                             currentByteIndex += 1
                         }
                         DnsType.A -> {
-                            typeA(data.joinToString(".") { it.toInt().toString() })
+                            typeA(data.joinToString(".") { "%02x".format(it).toInt(16).toString() })
                             currentByteIndex += dataLength
                         }
                         DnsType.AAAA -> {

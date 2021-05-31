@@ -6,65 +6,76 @@ import io.ktor.network.sockets.*
 import io.ktor.util.network.*
 import io.ktor.utils.io.core.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.selects.whileSelect
 import utils.log
 import java.net.InetSocketAddress
 
 class DnsServiceImpl : DnsService {
-    private abstract class DnsResult
-    private class NameServer(hostname: String) : DnsResult()
-    private class ResolvedAddress(ip: String)  : DnsResult()
 
-    @ExperimentalCoroutinesApi
-    override suspend fun resolve(domainName: String, type: DnsType): DnsService.Result {
-        resolveZone("com", DnsType.A, Config.rootServers.map { it.ipV4 })
-        return DnsService.Result(emptyList())
+    private val cache = mutableMapOf<String, MutableList<String>>()
+
+    init {
+        Config.rootServers.forEach {
+            cache[it.hostname] = mutableListOf(it.ipV4)
+        }
     }
 
-    @ExperimentalCoroutinesApi
-    private suspend fun resolveZone(zoneName: String, type:DnsType, serverAddresses: List<String>): DnsResult {
-        val packet = packet {
-            id = 73
-            isResponse = false
-            opcode = 0
-            authoritativeAnswer = false
-            truncation = false
-            recursionDesired = false
-            recursionAvailable = false
-            responseCode = 0
+    @ExperimentalUnsignedTypes
+    override suspend fun resolve(domainName: String): DnsService.Result {
+        val queue = DnsServersQueue(domainName, Config.rootServers.map { it.hostname })
 
-            question(type, DnsClass.IN) {
-                - zoneName
+        while (queue.isNotEmpty()) {
+            val nsHost = queue.dequeue()
+            if (!cache.containsKey(nsHost)) {
+                cache[nsHost] = resolve(nsHost).ips.toMutableList()
             }
-        }.bytes
+            val nsIp = cache[nsHost]?.first() ?: continue
 
-        coroutineScope {
-            whileSelect {
-                serverAddresses.map {
-                    async {
-                        val socket = aSocket(ActorSelectorManager(Dispatchers.IO))
-                            .udp()
-                            .connect(InetSocketAddress(it, 53))
-                        socket.send(Datagram(ByteReadPacket(packet), NetworkAddress(it, 53)))
-                        socket.receive().packet.readBytes()
-                    }
-                }
-                .forEach {
-                    it.onAwait { array ->
-                        log("Received: ${array.joinToString("") { "%02x".format(it) }}")
-                        val receivedPacket = DnsPacket.fromByteArray(array)
-                        val resolvedIps = receivedPacket.answers.filter { it.dnsType == DnsType.A || it.dnsType == DnsType.AAAA }
-                        val nameServers = receivedPacket.answers.filter { it.dnsType == DnsType.NS }
+            val questionPacket = packet {
+                id = 73
+                isResponse = false
+                opcode = 0
+                authoritativeAnswer = false
+                truncation = false
+                recursionDesired = false
+                recursionAvailable = false
+                responseCode = 0
 
-                        true
-                    }
+                question(DnsType.A, DnsClass.IN) {
+                    domainName.split(".").forEach { - it }
                 }
+            }.bytes
+
+            val socket = aSocket(ActorSelectorManager(Dispatchers.IO))
+                .udp()
+                .connect(InetSocketAddress(nsIp, 53))
+            socket.send(Datagram(ByteReadPacket(questionPacket), NetworkAddress(nsIp, 53)))
+            val receivedPacketBytes = socket.receive().packet.readBytes()
+            log("Received: ${receivedPacketBytes.joinToString("") { "%02x".format(it) }}")
+
+            val receivedPacket = DnsPacket.fromByteArray(receivedPacketBytes)
+            val resolvedIpV4s = receivedPacket.answers.filterIsInstance<DnsPacket.ResourceRecordA>().map { it.ipV4 }
+
+            if (resolvedIpV4s.isNotEmpty()) {
+                return DnsService.Result(resolvedIpV4s)
+            }
+
+            val nsAnswers = receivedPacket.authorities.filterIsInstance<DnsPacket.ResourceRecordNS>()
+
+            if (nsAnswers.isEmpty()) continue
+
+            val additionals = receivedPacket.additionals
+                .filterIsInstance<DnsPacket.ResourceRecordA>()
+
+            nsAnswers.forEach { nsRR ->
+                val ip = additionals.firstOrNull { it.labels == nsRR.nsLabels }?.ipV4
+                val joinedName = nsRR.nsLabels.joinToString(".")
+                if (ip != null && !cache.containsKey(joinedName)) {
+                    cache[joinedName] = mutableListOf(ip)
+                }
+                queue.enqueue(joinedName)
             }
         }
 
-        return NameServer("")
+        return DnsService.Result(emptyList())
     }
 }
