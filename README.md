@@ -1,2 +1,2 @@
-# dns-resolver
-Simple Kotlin DNS resolver
+# Kotlin DNS resolver
+DNS resolver with Kotlin DSL for DNS packets
