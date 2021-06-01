@@ -7,6 +7,7 @@ import io.ktor.util.network.*
 import io.ktor.utils.io.core.*
 import kotlinx.coroutines.Dispatchers
 import utils.log
+import utils.ofType
 import java.net.InetSocketAddress
 
 class DnsServiceImpl : DnsService {
@@ -22,6 +23,7 @@ class DnsServiceImpl : DnsService {
     @ExperimentalUnsignedTypes
     override suspend fun resolve(domainName: String): DnsService.Result {
         val queue = DnsServersQueue(domainName, Config.rootServers.map { it.hostname })
+        val name = DnsName(domainName)
 
         while (queue.isNotEmpty()) {
             val nsHost = queue.dequeue()
@@ -41,9 +43,7 @@ class DnsServiceImpl : DnsService {
                     recursionAvailable = false,
                     responseCode = 0
             ) {
-                question(DnsType.A, DnsClass.IN) {
-                    domainName.split(".").forEach { - it }
-                }
+                question(name, DnsType.A)
             }.bytes
 
             val socket = aSocket(ActorSelectorManager(Dispatchers.IO))
@@ -53,22 +53,22 @@ class DnsServiceImpl : DnsService {
             val receivedPacketBytes = socket.receive().packet.readBytes()
 
             val receivedPacket = DnsPacket.fromByteArray(receivedPacketBytes)
-            val resolvedIpV4s = receivedPacket.answers.filterIsInstance<DnsPacket.ResourceRecordA>().map { it.ipV4 }
+            val resolvedIpV4s = receivedPacket.answers.ofType<RRData.A>()
+
 
             if (resolvedIpV4s.isNotEmpty()) {
-                return DnsService.Result(resolvedIpV4s)
+                return DnsService.Result(resolvedIpV4s.map { it.second.ipV4 })
             }
 
-            val nsAnswers = receivedPacket.authorities.filterIsInstance<DnsPacket.ResourceRecordNS>()
+            val nsAnswers = receivedPacket.authorities.ofType<RRData.NS>()
 
             if (nsAnswers.isEmpty()) continue
 
-            val additionals = receivedPacket.additionals
-                .filterIsInstance<DnsPacket.ResourceRecordA>()
+            val additionals = receivedPacket.additionals.ofType<RRData.A>()
 
-            nsAnswers.forEach { nsRR ->
-                val ip = additionals.firstOrNull { it.labels == nsRR.nsLabels }?.ipV4
-                val joinedName = nsRR.nsLabels.joinToString(".")
+            nsAnswers.forEach { (nsRR, nsData) ->
+                val ip = additionals.firstOrNull { it.first.name == nsData.serverName }?.second?.ipV4
+                val joinedName = nsData.serverName.value
                 if (ip != null && !cache.containsKey(joinedName)) {
                     cache[joinedName] = mutableListOf(ip)
                 }
@@ -95,8 +95,8 @@ class DnsServiceImpl : DnsService {
             ) {}.bytes
         }
 
-        val asked = queryPacket.questions.first().labels.joinToString(".")
-        val resolvedIps = resolve(asked).ips
+        val asked = queryPacket.questions.first().name
+        val resolvedIps = resolve(asked.value).ips
 
         return packet(
             id = queryPacket.id,
@@ -108,18 +108,8 @@ class DnsServiceImpl : DnsService {
             recursionAvailable = false,
             responseCode = 0
         ) {
-            queryPacket.questions.forEach {
-                question(it.type, it.dnsClass) {
-                    it.labels.forEach { - it }
-                }
-            }
-
-            resolvedIps.forEach { ip ->
-                answer {
-                    name { asked.split(".").forEach { - it } }
-                    typeA(ip)
-                }
-            }
+            queryPacket.questions.forEach { question(it) }
+            resolvedIps.forEach { ip -> answer(asked, 0) { RRData.A(ip) } }
         }.bytes
     }
 }

@@ -20,62 +20,19 @@ data class DnsPacket(
     data class Question(
         val type: DnsType,
         val dnsClass: DnsClass,
-        val labels: List<String>
+        val name: DnsName
     )
 
-    abstract class ResourceRecord(
-        val labels: List<String>,
+    data class ResourceRecord(
+        val name: DnsName,
         val dnsClass: DnsClass,
-        val timeToLive: Int
+        val timeToLive: Int,
+        val data: RRData
     ) {
-        abstract val dnsType: DnsType
-        abstract val data: ByteArray
+        val dnsType = data.type
+        val dataBytes = data.bytes
     }
 
-    class ResourceRecordA(
-        labels: List<String>,
-        dnsClass: DnsClass,
-        timeToLive: Int,
-        val ipV4: String
-    ) : ResourceRecord(labels, dnsClass, timeToLive) {
-
-        override val dnsType: DnsType = DnsType.A
-        override val data: ByteArray
-
-        init {
-            val ipBytes = ipV4.split(".")
-            require(ipBytes.size == 4 && ipBytes.all { it.toInt() < 256 })
-            data = byteArrayOf(*ipBytes.map { it.toInt().toByte() }.toByteArray())
-        }
-    }
-
-    class ResourceRecordNS(
-        labels: List<String>,
-        dnsClass: DnsClass,
-        timeToLive: Int,
-        val nsLabels: List<String>
-    ) : ResourceRecord(labels, dnsClass, timeToLive) {
-
-        override val dnsType: DnsType = DnsType.NS
-        override val data: ByteArray = ByteUtils.listOfLabelsToDnsNameBytes(nsLabels)
-    }
-
-    class ResourceRecordAAAA(
-        labels: List<String>,
-        dnsClass: DnsClass,
-        timeToLive: Int,
-        val ipV6: String
-    ) : ResourceRecord(labels, dnsClass, timeToLive) {
-
-        override val dnsType: DnsType = DnsType.AAAA
-        override val data: ByteArray
-
-        init {
-            val ipBytes = ipV6.split(":").flatMap { it.chunked(2) }
-            //require(ipBytes.size == 16 && ipBytes.all { it.toLong(radix = 16) < 256 })
-            data = byteArrayOf(*ipBytes.map { it.toLong(radix = 16).toByte() }.toByteArray())
-        }
-    }
 
     init {
         require(id <= 0xFFFF)
@@ -125,18 +82,18 @@ data class DnsPacket(
         bytesList.addAll(additionals.size.toTwoBytes())
 
         questions.forEach {
-            bytesList.addAll(ByteUtils.listOfLabelsToDnsNameBytes(it.labels).toList())
+            bytesList.addAll(ByteUtils.listOfLabelsToDnsNameBytes(it.name.labels).toList())
             bytesList.addAll(it.type.value.toTwoBytes())
             bytesList.addAll(it.dnsClass.value.toTwoBytes())
         }
 
         fun addResourceRecord(record: ResourceRecord) {
-            bytesList.addAll(ByteUtils.listOfLabelsToDnsNameBytes(record.labels).toList())
+            bytesList.addAll(ByteUtils.listOfLabelsToDnsNameBytes(record.name.labels).toList())
             bytesList.addAll(record.dnsType.value.toTwoBytes())
             bytesList.addAll(record.dnsClass.value.toTwoBytes())
             bytesList.addAll(record.timeToLive.toFourBytes())
-            bytesList.addAll(record.data.size.toTwoBytes())
-            bytesList.addAll(record.data.toList())
+            bytesList.addAll(record.dataBytes.size.toTwoBytes())
+            bytesList.addAll(record.dataBytes.toList())
         }
 
         answers.forEach { addResourceRecord(it) }
@@ -181,9 +138,6 @@ data class DnsPacket(
                         if (isPointer) {
                             val firstOffsetByte = array[currentByteIndex].toUInt().and(63u).toByte()
                             val offset = ByteUtils.twoBytesToInt(firstOffsetByte, array[currentByteIndex+1])
-                            if(offset == -127) {
-                                val kek = 0
-                            }
                             val oldPointer = currentByteIndex
                             currentByteIndex = offset
                             val pointedName = parseName()
@@ -212,23 +166,21 @@ data class DnsPacket(
                         throw UnsupportedDnsTypeException(type)
                     }
 
-                    question(type, DnsClass.fromValue(classValue)) {
-                        labels.forEach { - it }
-                    }
+                    question(DnsName(labels), type, DnsClass.fromValue(classValue))
 
                     currentByteIndex += 5
                 }
 
-                fun ResourceRecordDsl.parseResourceRecord() {
-                    name { parseName().forEach { - it } }
+                fun parseResourceRecord(): ResourceRecord {
+                    val name = DnsName(parseName())
 
                     val typeValue = ByteUtils.twoBytesToInt(array[currentByteIndex + 1], array[currentByteIndex + 2])
                     val classValue = ByteUtils.twoBytesToInt(array[currentByteIndex + 3], array[currentByteIndex + 4])
 
                     val type = DnsType.fromValue(typeValue)
 
-                    dnsClass = DnsClass.fromValue(classValue)
-                    timeToLive = ByteUtils.fourBytesToInt(
+                    val dnsClass = DnsClass.fromValue(classValue)
+                    val timeToLive = ByteUtils.fourBytesToInt(
                         array[currentByteIndex + 5],
                         array[currentByteIndex + 6],
                         array[currentByteIndex + 7],
@@ -236,33 +188,22 @@ data class DnsPacket(
                     )
 
                     val dataLength = ByteUtils.twoBytesToInt(array[currentByteIndex + 9], array[currentByteIndex + 10])
-                    val data = array.sliceArray(currentByteIndex + 11 until currentByteIndex + 11 + dataLength)
+                    val dataBytes = array.sliceArray(currentByteIndex + 11 until currentByteIndex + 11 + dataLength)
                     currentByteIndex += 11
 
-                    when (type) {
-                        DnsType.NS -> {
-                            typeNS { parseName().forEach { - it } }
-                            currentByteIndex += 1
-                        }
-                        DnsType.A -> {
-                            typeA(data.joinToString(".") { "%02x".format(it).toInt(16).toString() })
-                            currentByteIndex += dataLength
-                        }
-                        DnsType.AAAA -> {
-                            typeAAAA(
-                                data.toList().chunked(2).joinToString(":") {
-                                    ByteUtils.twoBytesToInt(it[0], it[1]).toString()
-                                }
-                            )
-                            currentByteIndex += dataLength
-                        }
-                        else -> throw UnsupportedDnsTypeException(type)
+                    val data = when (type) {
+                        DnsType.NS -> RRData.NS(DnsName(parseName())).also { currentByteIndex += 1  }
+                        DnsType.A -> RRData.A(dataBytes.joinToString(".") { "%02x".format(it).toInt(16).toString() })
+                            .also { currentByteIndex += dataLength  }
+                        else -> RRData.NULL(dataBytes).also { currentByteIndex += dataLength }
                     }
+
+                    return ResourceRecord(name, dnsClass, timeToLive, data)
                 }
 
-                for (i in 0 until answersCount) { answer { parseResourceRecord() } }
-                for (i in 0 until authoritiesCount) { authority { parseResourceRecord() } }
-                for (i in 0 until additionalsCount) { additional { parseResourceRecord() } }
+                for (i in 0 until answersCount) { answer(parseResourceRecord()) }
+                for (i in 0 until authoritiesCount) { authority(parseResourceRecord()) }
+                for (i in 0 until additionalsCount) { additional(parseResourceRecord()) }
             }
         }
     }
