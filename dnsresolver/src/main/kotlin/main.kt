@@ -1,5 +1,6 @@
 import resolver.runDns
 
+@ExperimentalUnsignedTypes
 fun main(args: Array<String>) {
-    runDns("192.168.1.40")
+    runDns(Config.HOST_IP)
 }

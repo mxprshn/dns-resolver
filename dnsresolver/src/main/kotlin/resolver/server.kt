@@ -1,35 +1,39 @@
 package resolver
 
+import Config.DNS_PORT
 import io.ktor.network.selector.*
 import io.ktor.network.sockets.*
 import io.ktor.utils.io.core.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import utils.log
 import java.net.InetSocketAddress
 
-private const val DNS_PORT = 53
-
+@ExperimentalUnsignedTypes
 fun runDns(ip: String) {
-    val dnsService = DnsServiceImpl(
-        DnsPacketProcessorImpl(),
-        ExternalDnsService("8.8.8.8"),
-        setOf("timetable.spbu.ru"),
-        "192.168.1.40"
-    )
+    val service = DnsServiceImpl()
 
     runBlocking {
         val server = aSocket(ActorSelectorManager(Dispatchers.IO))
             .udp()
             .bind(InetSocketAddress(ip, DNS_PORT))
 
+        log("Serving at port $DNS_PORT")
+
         while (true) {
             val receivedDatagram = server.receive()
 
             launch {
                 val packet = receivedDatagram.packet.readBytes()
-                val answerPacket = dnsService.resolveAddress(packet)
-                server.send(Datagram(ByteReadPacket(answerPacket), receivedDatagram.address))
+                runCatching {
+                    service.resolve(packet)
+                }.onFailure {
+                    log(it, "Cannot resolve name")
+                }.onSuccess {
+                    server.send(Datagram(ByteReadPacket(it), receivedDatagram.address))
+                }
+
             }
         }
     }

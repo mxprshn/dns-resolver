@@ -14,8 +14,16 @@ repositories {
 tasks.withType<KotlinCompile>() {
     kotlinOptions.jvmTarget = "1.8"
 }
+
 application {
     mainClassName = "MainKt"
+}
+
+tasks.test {
+    useJUnitPlatform()
+    testLogging {
+        events("passed", "skipped", "failed")
+    }
 }
 
 dependencies {
@@ -24,4 +32,8 @@ dependencies {
     implementation("io.ktor:ktor-server-core:$ktorVersion")
     implementation("io.ktor:ktor-server-netty:$ktorVersion")
     implementation("io.ktor:ktor-html-builder:$ktorVersion")
+
+    val jUnitVersion = "5.7.2"
+    testImplementation(platform("org.junit:junit-bom:$jUnitVersion"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
 }
