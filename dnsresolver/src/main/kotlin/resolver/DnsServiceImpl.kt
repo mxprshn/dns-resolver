@@ -22,19 +22,26 @@ class DnsServiceImpl : DnsService {
 
     @ExperimentalUnsignedTypes
     override suspend fun resolve(domainName: String): DnsService.Result {
+        val cached = cache[domainName]
+        if (cached != null) {
+            log("Found cached ips for $domainName")
+            return DnsService.Result(cached)
+        }
+
         val queue = DnsServersQueue(domainName, Config.rootServers.map { it.hostname })
         val name = DnsName(domainName)
 
         while (queue.isNotEmpty()) {
             val nsHost = queue.dequeue()
             if (!cache.containsKey(nsHost)) {
-                log("No cached ip found for $nsHost, resolve it")
+
                 cache[nsHost] = resolve(nsHost).ips.toMutableList()
             }
             val nsIp = cache[nsHost]?.first() ?: continue
             log("Asking $nsHost on $nsIp for $domainName")
 
-            val questionPacket = packet(id = 73,
+            val questionPacket = packet(
+                    id = 73,
                     isResponse = false,
                     opcode = 0,
                     authoritativeAnswer = false,
@@ -57,6 +64,8 @@ class DnsServiceImpl : DnsService {
 
 
             if (resolvedIpV4s.isNotEmpty()) {
+                val ips = resolvedIpV4s.map { it.second.ipV4 }
+                cache[domainName] = ips.toMutableList()
                 return DnsService.Result(resolvedIpV4s.map { it.second.ipV4 })
             }
 
@@ -66,7 +75,7 @@ class DnsServiceImpl : DnsService {
 
             val additionals = receivedPacket.additionals.ofType<RRData.A>()
 
-            nsAnswers.forEach { (nsRR, nsData) ->
+            nsAnswers.forEach { (_, nsData) ->
                 val ip = additionals.firstOrNull { it.first.name == nsData.serverName }?.second?.ipV4
                 val joinedName = nsData.serverName.value
                 if (ip != null && !cache.containsKey(joinedName)) {

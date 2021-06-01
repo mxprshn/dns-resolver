@@ -1,9 +1,15 @@
 import resolver.DnsType
 
 object Config {
+    const val HOST_IP = "192.168.1.40"
+    const val DNS_PORT = 53
+
     val supportedDnsTypes = listOf(
         DnsType.A,
-        DnsType.NS
+        DnsType.NS,
+        DnsType.PTR,
+        DnsType.CNAME,
+        DnsType.NULL
     )
 
     /**

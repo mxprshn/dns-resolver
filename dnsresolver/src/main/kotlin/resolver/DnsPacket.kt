@@ -195,6 +195,8 @@ data class DnsPacket(
                         DnsType.NS -> RRData.NS(DnsName(parseName())).also { currentByteIndex += 1  }
                         DnsType.A -> RRData.A(dataBytes.joinToString(".") { "%02x".format(it).toInt(16).toString() })
                             .also { currentByteIndex += dataLength  }
+                        DnsType.CNAME -> RRData.CNAME(DnsName(parseName())).also { currentByteIndex += 1  }
+                        DnsType.PTR -> RRData.PTR(DnsName(parseName())).also { currentByteIndex += 1 }
                         else -> RRData.NULL(dataBytes).also { currentByteIndex += dataLength }
                     }
 
