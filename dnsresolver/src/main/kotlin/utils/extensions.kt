@@ -1,5 +1,8 @@
 package utils
 
+import resolver.DnsPacket
+import resolver.RRData
+
 fun Int.toBooleanArray(takeLastBits: Int): BooleanArray {
     val converted = Integer.toBinaryString(this)
         .takeLast(takeLastBits)
@@ -41,4 +44,10 @@ fun Int.toFourBytes(): List<Byte> {
         (this shr 8 and 0xFF).toByte(),
         (this and 0xFF).toByte()
     )
+}
+
+inline fun <reified T: RRData> Collection<DnsPacket.ResourceRecord>.ofType(): Collection<Pair<DnsPacket.ResourceRecord, T>> {
+    return this
+        .filter { it.data is T }
+        .map { it to it.data as T }
 }
