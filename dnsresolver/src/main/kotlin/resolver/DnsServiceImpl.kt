@@ -41,7 +41,7 @@ class DnsServiceImpl : DnsService {
             log("Asking $nsHost on $nsIp for $domainName")
 
             val questionPacket = packet(
-                    id = 73,
+                    id = (0..65535).random(),
                     isResponse = false,
                     opcode = 0,
                     authoritativeAnswer = false,
